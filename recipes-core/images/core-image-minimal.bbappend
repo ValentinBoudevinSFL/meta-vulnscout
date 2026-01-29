@@ -1,1 +1,1 @@
-inherit vulnscout
+inherit vulnscout improve_kernel_cve_report

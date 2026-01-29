@@ -1,1 +1,1 @@
-inherit vulnscout_kernel_cve_exclusions
+inherit kernel-generate-cve-exclusions
