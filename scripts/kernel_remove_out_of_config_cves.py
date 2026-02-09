@@ -241,50 +241,59 @@ def kernel_find_defconfig_arguments(input_kernel_path: str, modified_files_resul
                 result[cve_id][f] = None
     return result
 
-def kernel_defconfig_comparison(origin_config: str, defconfig_affected: Dict[str, Dict[str, Optional[str]]]) -> Dict[str, List[str]]:
+def kernel_defconfig_comparison(
+    origin_config: str,
+    defconfig_affected: Dict[str, Dict[str, Optional[str]]]
+) -> Dict[str, Dict[str, Optional[str]]]:
     """
     Compare the kernel .config file with the defconfig_affected mapping:
         {
             cve_id: {
-                file1: CONFIG_X,
-                file2: CONFIG_Y,
+                file1: CONFIG_X or None,
+                file2: CONFIG_Y or None,
                 ...
             }
         }
     Returns:
         {
-            cve_id: [CONFIG_X, CONFIG_Z]
+            cve_id: {
+                file1: CONFIG_X or None,
+                file2: None,  # core file without CONFIG
+                ...
+            }
         }
 
-    Only returns CVEs where at least one CONFIG_* is enabled in .config.
+    Keeps CVEs with at least one enabled CONFIG or any core (None) files.
     """
     if not os.path.isfile(origin_config):
         print(f"ERROR: Missing .config at {origin_config}")
         return {}
-    configs_to_find = {
-        cfg
-        for cve_map in defconfig_affected.values()
-        for cfg in cve_map.values()
-        if cfg
-    }
-    if not configs_to_find:
-        return {}
-    pattern = re.compile(
-        r'^(' + "|".join(re.escape(cfg) for cfg in configs_to_find) + r')=(y|m|1)'
-    )
+
+    # collect all CONFIGs from defconfig_affected that are not None
+    configs_to_find = {cfg for file_map in defconfig_affected.values() for cfg in file_map.values() if cfg}
+
     enabled = set()
-    with open(origin_config, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            m = pattern.match(line)
-            if m:
-                enabled.add(m.group(1))
+    if configs_to_find:
+        pattern = re.compile(
+            r'^(' + "|".join(re.escape(cfg) for cfg in configs_to_find) + r')=(y|m|1)'
+        )
+        with open(origin_config, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                m = pattern.match(line)
+                if m:
+                    enabled.add(m.group(1))
+
     result = {}
     for cve_id, file_cfg_map in defconfig_affected.items():
-        enabled_cfgs = list({cfg for cfg in file_cfg_map.values() if cfg in enabled})
+        new_map = {}
+        for file_path, cfg in file_cfg_map.items():
+            # keep core files (None) and files with enabled CONFIG
+            if cfg is None or cfg in enabled:
+                new_map[file_path] = cfg
+        if new_map:
+            result[cve_id] = new_map
 
-        if enabled_cfgs:
-            result[cve_id] = enabled_cfgs
     return result
 
 def generate_kernel_filtered_cve_check(original_cve_path: str, enabled_cves: Dict[str, List[str]], output_path: str) -> Dict:
@@ -366,6 +375,19 @@ def main() -> None:
 
     print(f"CVEs affecting this kernel config: {len(enabled_cves)}")
 
+    removed_cves = {}
+
+    for cve_id, file_cfgs in defconfigs.items():
+        # Skip CVEs that are enabled (including core/None)
+        if cve_id in enabled_cves:
+            continue
+
+        # Only consider CVEs with at least one CONFIG_* to remove
+        if any(cfg is not None for cfg in file_cfgs.values()):
+            removed_cves[cve_id] = file_cfgs
+
+    print(f"CVEs removed by kernel config: {len(removed_cves)}")
+
     os.makedirs(args.output_path, exist_ok=True)
 
     enabled_cves_path = os.path.join(
@@ -377,6 +399,16 @@ def main() -> None:
         json.dump(enabled_cves, f, indent=4)
 
     print(f"Wrote enabled CVEs to: {enabled_cves_path}")
+
+    removed_cves_path = os.path.join(
+        args.output_path,
+        f"{args.output_files_name}.kernel_removed_cves.json"
+    )
+
+    with open(removed_cves_path, "w", encoding="utf-8") as f:
+        json.dump(removed_cves, f, indent=4)
+
+    print(f"Wrote removed CVEs to: {removed_cves_path}")
 
     filtered_rootfs_path = os.path.join(
         args.output_path,
