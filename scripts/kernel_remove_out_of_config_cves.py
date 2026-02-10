@@ -43,9 +43,21 @@ def get_parameters() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--output-files-name",
-        default="filtered_cve_check",
-        help="Base name for generated output files (default: filtered_cve_check)"
+        "--output-filename-cve-check",
+        default="kernel_filtered.json",
+        help="Base name for generated output files (default: kernel_filtered.json)"
+    )
+
+    parser.add_argument(
+        "--output-filename-remaining-cves",
+        default="kernel_remaining_cves.json",
+        help="Filename for remaining (enabled) kernel CVEs JSON (optional)"
+    )
+
+    parser.add_argument(
+        "--output-filename-removed-cves",
+        default="kernel_removed_cves.json",
+        help="Filename for removed kernel CVEs JSON (optional)"
     )
 
     parser.add_argument(
@@ -403,7 +415,7 @@ def main() -> None:
 
     enabled_cves_path = os.path.join(
         args.output_path,
-        f"{args.output_files_name}.kernel_remaining_cves.json"
+        f"{args.output_filename_remaining_cves}"
     )
 
     with open(enabled_cves_path, "w", encoding="utf-8") as f:
@@ -413,7 +425,7 @@ def main() -> None:
 
     removed_cves_path = os.path.join(
         args.output_path,
-        f"{args.output_files_name}.kernel_removed_cves.json"
+        f"{args.output_filename_removed_cves}"
     )
 
     with open(removed_cves_path, "w", encoding="utf-8") as f:
@@ -423,7 +435,7 @@ def main() -> None:
 
     filtered_rootfs_path = os.path.join(
         args.output_path,
-        f"{args.output_files_name}.kernel_filtered.json"
+        f"{args.output_filename_cve_check}"
     )
 
     generate_kernel_filtered_cve_check(
