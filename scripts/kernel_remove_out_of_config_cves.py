@@ -363,6 +363,13 @@ def main() -> None:
 
     print(f"CVEs with affected files from vulns repo: {len(affected_files)}")
 
+    unfixed_ids = {cve["id"] for cve in unfixed if cve.get("id")}
+    affected_ids = set(affected_files.keys())
+
+    # CVEs we cannot analyze → must be kept
+    unmapped_cves = unfixed_ids - affected_ids
+    print(f"CVEs without affected files (kept as-is): {len(unmapped_cves)}")
+
     defconfigs = kernel_find_defconfig_arguments(
         args.input_kernel_path,
         affected_files
@@ -372,6 +379,10 @@ def main() -> None:
         args.input_config_path,
         defconfigs
     )
+
+    # CVEs without affected files must be kept
+    for cve_id in unmapped_cves:
+        enabled_cves[cve_id] = {}
 
     print(f"CVEs affecting this kernel config: {len(enabled_cves)}")
 
